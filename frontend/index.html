@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Car Sales Forecast</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --ink: #1f2933;
+      --muted: #5f6c7b;
+      --line: #d9e0e7;
+      --accent: #0f766e;
+      --accent-dark: #0b5c56;
+      --bg: #f3f6f8;
+      --error: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .card {
+      width: 100%;
+      max-width: 460px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 28px;
+      box-shadow: 0 6px 24px rgba(31, 41, 51, 0.07);
+    }
+    h1 { margin: 0 0 6px; font-size: 1.5rem; }
+    .sub { margin: 0 0 22px; color: var(--muted); font-size: 0.95rem; line-height: 1.45; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    label { font-size: 0.95rem; }
+    input[type="number"] {
+      width: 150px;
+      padding: 9px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 1rem;
+      text-align: right;
+    }
+    input[type="number"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    input.invalid { border-color: var(--error); background: #fff5f4; }
+    .actions { display: flex; gap: 10px; margin-top: 18px; }
+    button {
+      font: inherit;
+      border-radius: 8px;
+      padding: 11px 16px;
+      cursor: pointer;
+    }
+    #predict-btn {
+      flex: 1;
+      background: var(--accent);
+      color: #fff;
+      border: 0;
+      font-weight: 600;
+    }
+    #predict-btn:hover { background: var(--accent-dark); }
+    #predict-btn:disabled { opacity: 0.6; cursor: wait; }
+    #example-btn { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+    #example-btn:hover { background: var(--bg); }
+    #message { min-height: 1.3em; margin: 14px 0 0; font-size: 0.9rem; color: var(--error); }
+    #result {
+      display: none;
+      margin-top: 16px;
+      padding: 16px;
+      border-radius: 10px;
+      background: #e8f5f3;
+      text-align: center;
+    }
+    #result .label { color: var(--muted); font-size: 0.9rem; }
+    #result .value { font-size: 2rem; font-weight: 700; color: var(--accent-dark); }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Car Sales Forecast</h1>
+    <p class="sub">Enter sales for the last 6 months, oldest first. The model predicts next month's sales.</p>
+
+    <form id="form" novalidate>
+      <div class="row"><label for="m1">6 months ago</label><input type="number" id="m1" min="0" step="any" required></div>
+      <div class="row"><label for="m2">5 months ago</label><input type="number" id="m2" min="0" step="any" required></div>
+      <div class="row"><label for="m3">4 months ago</label><input type="number" id="m3" min="0" step="any" required></div>
+      <div class="row"><label for="m4">3 months ago</label><input type="number" id="m4" min="0" step="any" required></div>
+      <div class="row"><label for="m5">2 months ago</label><input type="number" id="m5" min="0" step="any" required></div>
+      <div class="row"><label for="m6">Last month</label><input type="number" id="m6" min="0" step="any" required></div>
+
+      <div class="actions">
+        <button type="button" id="example-btn" title="Jul to Dec 1968 from the dataset">Fill example</button>
+        <button type="submit" id="predict-btn">Predict</button>
+      </div>
+    </form>
+
+    <p id="message" role="alert"></p>
+
+    <div id="result" aria-live="polite">
+      <div class="label">Predicted sales for next month</div>
+      <div class="value" id="prediction"></div>
+    </div>
+  </main>
+
+  <script>
+    const inputs = Array.from({ length: 6 }, (_, i) => document.getElementById("m" + (i + 1)));
+    const form = document.getElementById("form");
+    const message = document.getElementById("message");
+    const result = document.getElementById("result");
+    const predictionEl = document.getElementById("prediction");
+    const predictBtn = document.getElementById("predict-btn");
+
+    // Jul to Dec 1968 from the dataset
+    const example = [18024, 16722, 14385, 21342, 17180, 14577];
+
+    document.getElementById("example-btn").addEventListener("click", () => {
+      inputs.forEach((el, i) => { el.value = example[i]; el.classList.remove("invalid"); });
+      message.textContent = "";
+    });
+
+    // Check the six values before sending them to the server
+    function validate() {
+      let ok = true;
+      inputs.forEach((el) => {
+        const text = el.value.trim();
+        const value = Number(text);
+        const bad = text === "" || !Number.isFinite(value) || value < 0;
+        el.classList.toggle("invalid", bad);
+        if (bad) ok = false;
+      });
+      return ok;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      result.style.display = "none";
+      message.textContent = "";
+
+      if (!validate()) {
+        message.textContent = "Please fill in all 6 months with numbers that are 0 or more.";
+        return;
+      }
+
+      predictBtn.disabled = true;
+      predictBtn.textContent = "Predicting...";
+      try {
+        const response = await fetch("/predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sales: inputs.map((el) => Number(el.value)) }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(typeof data.detail === "string" ? data.detail : "The server could not make a prediction.");
+        }
+        predictionEl.textContent = Math.round(data.prediction).toLocaleString();
+        result.style.display = "block";
+      } catch (err) {
+        message.textContent = err.message || "Something went wrong. Please try again.";
+      } finally {
+        predictBtn.disabled = false;
+        predictBtn.textContent = "Predict";
+      }
+    });
+  </script>
+</body>
+</html>
